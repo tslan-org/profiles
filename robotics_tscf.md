@@ -33,7 +33,7 @@ Control laws, functional safety, and media-like sensors such as cameras and micr
 
 - **Basic Audio Profile:** a sensor channel sampled faster than 4 kHz, such as a contact microphone or a tactile vibration pickup, is audio for transport purposes and is carried as an AAF stream under the Basic Audio Profile (informative).
 - **Basic Video Profile:** sensors that produce images, such as cameras and optical tactile sensors, use the Basic Video Profile.
-- **TSN Robotics Profile:** its joint command and joint state arrays are control streams of this profile (§2.3), with `gpc_msg_id` `8C:1F:64:36:C0:08` as their cluster format; its IMUs, force/torque sensors and tactile maps can be sensor streams of this profile. Its Working Clock, safety heartbeat and safety state machine stay in that profile.
+- **Robotics Profile:** its joint command and joint state arrays are control streams of this profile (§2.3), with `gpc_msg_id` `8C:1F:64:36:C0:08` as their cluster format; its IMUs, force/torque sensors and tactile maps can be sensor streams of this profile. Its Working Clock, safety heartbeat and safety state machine stay in that profile.
 - **Milan:** Milan entities need no change: they use only Classes A and B and ignore the streams and classes of this profile. Classes C, D and E sit above A and B, though, so on a port carrying both their traffic adds to Class A and B latency; §5.1 caps it and has the network check Class A's bound.
 
 ### 1.3 Draft Notes (informative)
@@ -41,7 +41,7 @@ Control laws, functional safety, and media-like sensors such as cameras and micr
 Points open in this draft:
 
 - Compact integer value formats, for low-bandwidth links, may follow in a later revision.
-- Setpoint semantics for drives (modes, enabling, faults) are left to profiles such as the TSN Robotics Profile; alignment with the IEC 61800-7 drive profiles is a candidate for a later revision.
+- Setpoint semantics for drives (modes, enabling, faults) are left to profiles such as the Robotics Profile; alignment with the IEC 61800-7 drive profiles is a candidate for a later revision.
 
 ---
 
@@ -90,7 +90,7 @@ Setpoint streams use `ACF_SENSOR` rather than `ACF_SENSOR_BRIEF`, and so carry 8
 Control streams carry `ACF_GPC` messages (IEEE 1722-2016 §9.4.7), for setpoints and replies that need more than plain values, such as gains, modes, flags and end-to-end protection.
 
 - The `gpc_msg_id` identifies the payload layout, and is the EUI-48 of the profile or maker that defines it, from its own MA-L, MA-M or MA-S (§9.4.7.2).
-- The defining profile or maker gives the layout, its timing, and any integrity checks. The TSN Robotics Profile's joint arrays are one such layout.
+- The defining profile or maker gives the layout, its timing, and any integrity checks. The Robotics Profile's joint arrays are one such layout.
 - The cluster format of a control stream (§7.2) is its `gpc_msg_id`, so an ATDECC controller can tell control streams apart.
 
 ---
@@ -103,7 +103,7 @@ The value formats of this profile carry each value as an IEEE 754 binary32, big-
 
 - **Sensor and event streams:** a value that a sensor cannot provide for a sample, such as an axis out of range, is sent as a quiet NaN, and a listener treats it as missing.
 - **Setpoint streams:** a motion controller does not send NaN. An actuator listener treats a NaN setpoint as invalid, and handles it as it handles a setpoint lost with its frame.
-- **Control streams:** NaN handling is the defining profile's; the TSN Robotics Profile rejects a joint command containing one.
+- **Control streams:** NaN handling is the defining profile's; the Robotics Profile rejects a joint command containing one.
 - Vectors are in the sensor's own right-handed frame, as its maker documents it (informative).
 
 ### 3.2 Identification
@@ -147,7 +147,7 @@ In sensor and event streams, each `ACF_SENSOR` message's `message_timestamp` is 
 
 ### 4.3 Time Base
 
-Timestamps are in the time of the gPTP domain that the entity's clock domain follows: domain 0, unless a profile says otherwise. The TSN Robotics Profile uses its Working Clock domain (informative).
+Timestamps are in the time of the gPTP domain that the entity's clock domain follows: domain 0, unless a profile says otherwise. The Robotics Profile uses its Working Clock domain (informative).
 
 ### 4.4 Rates
 
@@ -182,12 +182,12 @@ With eight traffic classes, the mapping is:
 |----------|---|---|---|---|---|---|---|---|
 | Traffic class | 1 | 0 | 2 | 3 | 4 | 5 | 6 | 7 |
 
-This profile leaves priority 7 to safety profiles, such as the TSN Robotics Profile's safety heartbeat. Traffic at priority 7 is shaped or policed, so the shaped classes below keep their reservations, as IEEE 802.1Q-2022 §34.5 b) and Annex L.1 require.
+This profile leaves priority 7 to safety profiles, such as the Robotics Profile's safety heartbeat. Traffic at priority 7 is shaped or policed, so the shaped classes below keep their reservations, as IEEE 802.1Q-2022 §34.5 b) and Annex L.1 require.
 
 **Sharing a port with Classes A and B.** Classes C, D and E sit above A and B, so their traffic adds to the interference Class A and B frames see at each hop (IEEE 802.1Q-2022 Annex L.3). On a port carrying Class A or B streams:
 
 - the bridge keeps the bandwidth reserved for Classes A to E together within 75% of the port's transmit rate, through each class's deltaBandwidth (§34.3); and
-- a network carrying Milan streams checks that Class A stays within its 2 ms bound over its hop count, counting the largest bursts Classes C, D and E can send. The TSN Robotics Profile's §3.2 works one such case: about 48 µs per hop on a 1 Gb/s trunk (informative).
+- a network carrying Milan streams checks that Class A stays within its 2 ms bound over its hop count, counting the largest bursts Classes C, D and E can send. The Robotics Profile's §3.2 works one such case: about 48 µs per hop on a 1 Gb/s trunk (informative).
 
 ### 5.2 Choosing a Class
 
@@ -213,7 +213,7 @@ Because `MaxIntervalFrames` is at least 1, a stream slower than its class's inte
 
 ### 5.4 Fast Start
 
-Where streams have to run before MSRP has converged, as at a robot's power-on, bridges may hold static reservations and forwarding entries for them, and talkers send without waiting for listener registrations. The TSN Robotics Profile does so for its core body streams (informative).
+Where streams have to run before MSRP has converged, as at a robot's power-on, bridges may hold static reservations and forwarding entries for them, and talkers send without waiting for listener registrations. The Robotics Profile does so for its core body streams (informative).
 
 ---
 
@@ -222,7 +222,7 @@ Where streams have to run before MSRP has converged, as at a robot's power-on, b
 - **One frame per sample instant.** A sensor talker puts every cluster it samples at the same instant, at the same rate, into one AVTPDU, one `ACF_SENSOR` message per cluster. Clusters at different rates go in different streams.
 - **Streams per device and rate.** A sensor talker sends one sensor stream for each rate it samples at, not one per sensor.
 - **Control per actuator group.** A motion controller sends one setpoint or control stream for each group of actuators that act together, such as a limb, with each actuator taking its clusters or slots, rather than one stream for all actuators.
-- **Size.** An AVTPDU should stay within 676 octets, which keeps forwarding time short on 100 Mb/s links, and keeps a CRC-32C end-to-end check at Hamming distance 6 (up to 5,243 data bits) where a profile adds one, as the TSN Robotics Profile does over its payload and 14 octets of header and implicit identifier.
+- **Size.** An AVTPDU should stay within 676 octets, which keeps forwarding time short on 100 Mb/s links, and keeps a CRC-32C end-to-end check at Hamming distance 6 (up to 5,243 data bits) where a profile adds one, as the Robotics Profile does over its payload and 14 octets of header and implicit identifier.
 - **Small frames are free.** An AVTPDU shorter than 42 octets, such as one carrying a single one-value cluster, is padded to the minimum tagged Ethernet frame anyway, so packing a second small cluster into it costs little (informative).
 
 Each frame of a sensor stream carries about 66 octets of Ethernet and TSCF overhead, and each `ACF_SENSOR` message 12 more, so packing several clusters into one frame raises the share of the link that carries values: a single 3-value cluster uses about 13% of its frame, four such clusters about 30% (informative).

@@ -1,4 +1,4 @@
-# TSN Robotics Profile
+# Robotics Profile
 
 A profile for on-body robotics networks built on IEEE 802.1AS, IEEE 1722, IEEE 1722.1, and selected IEEE 802.1 TSN mechanisms from IEC/IEEE 60802-2026 and IEEE 802.1DG-2025: synchronized multi-joint actuation, coherent multimodal perception, bounded AVB media coexistence, and end-to-end black-channel integrity.
 

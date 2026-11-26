@@ -19,5 +19,5 @@ tsLAN Profiles
 - Voice Assistant Profile
 
 ## robotics
-- TSN Robotics Profile
+- Robotics Profile
 - Robotics TSCF Streams Profile
