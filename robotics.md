@@ -61,7 +61,6 @@ A robot often carries microphones, speakers, and cameras alongside its control l
 
 Points open in this draft:
 
-- Protocol identifier `8C:1F:64:36:C0:08` is reserved in the Scramble Tools MA-S registry (`status = "reserved"`) and moves to active when this profile is published.
 - Clause citations to IEEE 802.1AS were verified against IEEE 802.1AS-2020; clause numbering should be re-checked against IEEE 802.1AS-2025 once that document is on hand.
 - IEEE P802.1ASds (half-duplex / 10BASE-T1S timing) is in Standards Association ballot (draft amendment) and is referenced as optional forward guidance only.
 - IEEE 1722.1 AEM vendor control types for robotics-specific parameters (homing, calibration tables, per-joint gain and damping limits) will be allocated from the MA-S control-type pool in a later revision.

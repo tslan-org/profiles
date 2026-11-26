@@ -40,7 +40,6 @@ Control laws, functional safety, and media-like sensors such as cameras and micr
 
 Points open in this draft:
 
-- The value format identifiers of §3.3, `8C:1F:64:36:C0:10` to `8C:1F:64:36:C0:1F`, are reserved in the Scramble Tools MA-S registry (`status = "reserved"`) and move to active when this profile is published.
 - Compact integer value formats, for low-bandwidth links, may follow in a later revision.
 - Setpoint semantics for drives (modes, enabling, faults) are left to profiles such as the TSN Robotics Profile; alignment with the IEC 61800-7 drive profiles is a candidate for a later revision.
 
