@@ -1,5 +1,5 @@
 # profiles
-AVB Community Profiles
+tsLAN Profiles
 
 ## audio
 - Basic Audio Profile

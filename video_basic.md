@@ -1,6 +1,6 @@
 # Basic Video Profile
 
-This AVB community profile specifies the basic requirements for video streaming compatibility: unprotected video up to HD, at up to 30 frames per second.
+This tsLAN profile specifies the basic requirements for video streaming compatibility: unprotected video up to HD, at up to 30 frames per second.
 
 Version: 1.0-draft
 

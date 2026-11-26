@@ -1,6 +1,6 @@
 # Basic Audio Profile
 
-This AVB community profile specifies the basic requirements for audio streaming compatibility.
+This tsLAN profile specifies the basic requirements for audio streaming compatibility.
 
 Version: 1.1-draft
 

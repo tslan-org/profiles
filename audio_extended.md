@@ -1,6 +1,6 @@
 # Extended Audio Profile
 
-This AVB community profile specifies the extended requirements for audio streaming compatibility. All requirements from the Basic Audio Profile apply, with the following additions.
+This tsLAN profile specifies the extended requirements for audio streaming compatibility. All requirements from the Basic Audio Profile apply, with the following additions.
 
 Version: 1.1-draft
 
