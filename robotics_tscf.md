@@ -15,7 +15,7 @@ This profile specifies:
 - **Stream types:** sensor, setpoint and control streams, all TSCF (§2).
 - **Value formats:** standard layouts for common measurements, in SI units (§3).
 - **Timing:** what the stream and message timestamps mean (§4).
-- **SR classes:** three additional SR classes for control, event and sensor streams, with a fallback to Classes A and B (§5).
+- **SR classes:** one additional SR class, Class C, for control loops, with Classes A and B for other streams and as a fallback (§5).
 - **Packing:** how many values and messages go in one frame (§6).
 - **Discovery and connection:** how IEEE 1722.1 describes each stream's contents (§7).
 
@@ -27,14 +27,14 @@ Control laws, functional safety, and media-like sensors such as cameras and micr
 - **Actuator listener:** an ATDECC entity that receives setpoint or control streams and applies them.
 - **Motion controller:** an ATDECC entity that receives sensor streams and sends setpoint or control streams. It is named so here to tell it apart from an ATDECC controller.
 - **ATDECC controller:** the ATDECC role that enumerates entities and connects their streams.
-- **Bridge:** an AV bridge that forwards and shapes the streams, and supports the SR classes of §5 where it can.
+- **Bridge:** an AV bridge that forwards and shapes the streams, and supports Class C (§5) where it can.
 
 ### 1.2 Relation to Other Profiles and Milan
 
 - **Basic Audio Profile:** a sensor channel sampled faster than 4 kHz, such as a contact microphone or a tactile vibration pickup, is audio for transport purposes and is carried as an AAF stream under the Basic Audio Profile (informative).
 - **Basic Video Profile:** sensors that produce images, such as cameras and optical tactile sensors, use the Basic Video Profile.
 - **Robotics Profile:** its joint command and joint state arrays are control streams of this profile (§2.3), with `gpc_msg_id` `8C:1F:64:36:C0:08` as their cluster format; its IMUs, force/torque sensors and tactile maps can be sensor streams of this profile. Its Working Clock, safety heartbeat and safety state machine stay in that profile.
-- **Milan:** Milan entities need no change: they use only Classes A and B and ignore the streams and classes of this profile. Classes C, D and E sit above A and B, though, so on a port carrying both their traffic adds to Class A and B latency; §5.1 caps it and has the network check Class A's bound.
+- **Milan:** Milan entities need no change: they use only Classes A and B and ignore the streams and SR class of this profile. Class C sits above A and B, though, so on a port carrying both its traffic adds to Class A and B latency; §5.1 caps it and has the network check Class A's bound.
 
 ### 1.3 Draft Notes (informative)
 
@@ -42,6 +42,7 @@ Points open in this draft:
 
 - Compact integer value formats, for low-bandwidth links, may follow in a later revision.
 - Setpoint semantics for drives (modes, enabling, faults) are left to profiles such as the Robotics Profile; alignment with the IEC 61800-7 drive profiles is a candidate for a later revision.
+- SR classes beyond C, such as Classes D and E at priorities 5 and 4 for event and sensor streams, are deferred, and may follow if bench measurements show Classes A, B and C are not enough (§5.1).
 
 ---
 
@@ -61,8 +62,8 @@ A TSCF stream may list up to four message types (Annex I.2.7), but this profile'
 
 | Stream type | Direction | ACF message | SR class (§5) |
 |-------------|-----------|-------------|---------------|
-| Sensor | Sensor talker to motion controller | `ACF_SENSOR` (`0x08`) | E, or B |
-| Event | Sensor talker to motion controller | `ACF_SENSOR` (`0x08`) | D, or A |
+| Sensor | Sensor talker to motion controller | `ACF_SENSOR` (`0x08`) | C, or A, where it feeds a control loop; otherwise B, or A |
+| Event | Sensor talker to motion controller | `ACF_SENSOR` (`0x08`) | C, or A |
 | Setpoint | Motion controller to actuator listener | `ACF_SENSOR` (`0x08`) | C, or A |
 | Control | Motion controller to actuator listener, or the reverse | `ACF_GPC` (`0x05`) | C, or A |
 
@@ -157,48 +158,56 @@ Sensor streams run at 1 Hz to 4 kHz, setpoint and control streams at 10 Hz to 4 
 
 ## 5. SR Classes and Reservation
 
-### 5.1 Additional SR Classes
+### 5.1 Class C
 
-IEEE 802.1Q-2022 defines SR classes C to G beyond A and B, enabled through management (§35.2.2.9.2, Table 35-6). This profile uses three of them:
+IEEE 802.1Q-2022 defines SR classes C to G beyond A and B, enabled through management (§35.2.2.9.2, Table 35-6). This profile uses one of them:
 
-| SR class | SRclassID | Priority | classMeasurementInterval (default) | Streams |
-|----------|-----------|----------|------------------------------------|---------|
-| C | 4 | 6 | 500 µs | Setpoint and control |
-| D | 3 | 5 | 1 ms | Event |
-| E | 2 | 4 | 1 ms | Sensor |
+| SR class | SRclassID | Priority (default) | classMeasurementInterval (default) | Streams |
+|----------|-----------|--------------------|------------------------------------|---------|
+| C | 4 | 6 | 500 µs | Setpoint, control and event streams, and sensor streams that feed a control loop |
 
-- Their SRclassVID is the SR VLAN, VID 2 by default.
-- The classMeasurementIntervals above are this profile's defaults, configured through IEEE 802.1Q-2022 §12.20.1, which defines defaults only for Classes A (125 µs) and B (250 µs). A network may set class C's to its control cycle, so a stream sending one frame per cycle reserves exactly that.
-- A bridge or end station that supports these classes states so in its PICS, as IEEE 802.1Q-2022 requires for SR classes beyond B.
+- **Priority.** IEEE 802.1Q-2022 gives default priorities only to Classes A and B, and leaves the others to management (§35.2.2.9.2, §12.20.4); 6 is this profile's default for Class C. A network may map Class C to another priority, provided every station in the SRP domain uses the same one (§35.1.4), and adjusts the queue mapping below to match. A talker takes Class C's priority from the Domain declaration it receives (§35.2.2.9.3), and uses 6 until it receives one.
+- **VLAN.** Class C's SRclassVID is the SR VLAN, VID 2 by default, which a talker likewise takes from the Domain declaration (§35.2.2.9.4).
+- **Interval.** The 500 µs classMeasurementInterval is this profile's default, configured through IEEE 802.1Q-2022 §12.20.1, which defines defaults only for Classes A (125 µs) and B (250 µs). The Domain declaration does not carry the interval, so a network that changes it, for example to its control cycle so that a stream sending one frame per cycle reserves exactly that, sets the same value on every bridge and talker in the SRP domain. A talker counts its `MaxIntervalFrames` (§5.3) against that interval.
+- **Boundary ports.** A bridge port that is an SRP domain boundary port for Class C regenerates received frames of Class C's priority to priority 0, through its Priority Regeneration Override Table (§6.9.4, §12.20.3), as Table 6-5 does by default for Classes A and B. Frames from outside the domain then cannot take Class C's reservation.
+- **PICS.** A bridge or end station that supports Class C states so in its PICS, as IEEE 802.1Q-2022 requires for SR classes beyond B.
 
-**Queues.** IEEE 802.1Q-2022's default mapping for Classes A and B (Table 34-1) puts priorities 3 and 2 in the two highest traffic classes and priorities 6, 5 and 4 below them, in strict-priority queues. A bridge supporting Classes C, D and E therefore also configures:
+A Class C interval that differs between devices harms only Class C streams, as Class C's shaper still bounds its traffic: a bridge interval longer than a talker's reserves too little and delays the stream, and a shorter one reserves more than it uses (informative).
 
-- its Traffic Class Table (§12.6.3), so priorities 6, 5 and 4 take distinct traffic classes above those of priorities 3 and 2; and
-- its Transmission Selection Algorithm Table (§12.20.2), so those traffic classes use the credit-based shaper, as every SR class does (§34.5).
+Class C keeps control deadlines of 500 µs and less apart from the 2 ms and 50 ms bounds of Classes A and B. Further classes, such as D and E at priorities 5 and 4, are deferred until bench measurements show a need for them; until then, streams that do not need Class C use Class B or A (informative).
+
+**Queues.** IEEE 802.1Q-2022's default mapping for Classes A and B (Table 34-1) puts priorities 3 and 2 in the two highest traffic classes and priorities 6 and 7 below them, in strict-priority queues. A bridge supporting Class C therefore also configures:
+
+- its Traffic Class Table (§12.6.3), so priorities 7 and 6 take distinct traffic classes above those of priorities 3 and 2; and
+- its Transmission Selection Algorithm Table (§12.20.2), so priority 6's traffic class uses the credit-based shaper, as every SR class does (§34.5).
 
 With eight traffic classes, the mapping is:
 
 | Priority | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |----------|---|---|---|---|---|---|---|---|
-| Traffic class | 1 | 0 | 2 | 3 | 4 | 5 | 6 | 7 |
+| Traffic class | 1 | 0 | 4 | 5 | 2 | 3 | 6 | 7 |
+
+Priorities 0, 1, 4 and 5 keep their Table 34-1 traffic classes, below Classes A and B. A profile that shapes or polices priorities 4 and 5, as the Robotics Profile does, may place them above Classes A and B instead (informative).
 
 This profile leaves priority 7 to safety profiles, such as the Robotics Profile's safety heartbeat. Traffic at priority 7 is shaped or policed, so the shaped classes below keep their reservations, as IEEE 802.1Q-2022 §34.5 b) and Annex L.1 require.
 
-**Sharing a port with Classes A and B.** Classes C, D and E sit above A and B, so their traffic adds to the interference Class A and B frames see at each hop (IEEE 802.1Q-2022 Annex L.3). On a port carrying Class A or B streams:
+**Sharing a port with Classes A and B.** Class C sits above A and B, so its traffic adds to the interference Class A and B frames see at each hop (IEEE 802.1Q-2022 Annex L.3). On a port carrying Class A or B streams:
 
-- the bridge keeps the bandwidth reserved for Classes A to E together within 75% of the port's transmit rate, through each class's deltaBandwidth (§34.3); and
-- a network carrying Milan streams checks that Class A stays within its 2 ms bound over its hop count, counting the largest bursts Classes C, D and E can send. The Robotics Profile's §3.2 works one such case: about 48 µs per hop on a 1 Gb/s trunk (informative).
+- the bridge keeps the bandwidth reserved for Classes A, B and C together within 75% of the port's transmit rate, through each class's deltaBandwidth (§34.3); and
+- a network carrying Milan streams checks that Class A stays within its 2 ms bound over its hop count, counting the largest bursts Class C and priority 7 can send. The Robotics Profile's §3.2 works one such case: about 48 µs per hop on a 1 Gb/s trunk (informative).
 
 ### 5.2 Choosing a Class
 
 A talker learns the SR classes of its port from the MSRP Domain declarations it receives (IEEE 802.1Q-2022 §35.2.2.9).
 
-- Where its port declares class C, D or E, a talker uses that class for its streams, as §2.1 assigns them.
-- Where it does not, a talker falls back to Class A for setpoint, control and event streams, and Class B for sensor streams, and sets the CLASS_B flag of its STREAM_INFO for Class B as usual.
+- **Setpoint, control and event streams, and sensor streams that feed a control loop:** Class C where the talker's port declares it, and Class A where it does not.
+- **Other sensor streams:** Class B, or Class A where they need its lower latency.
 
-**Failure along the path.** A class C, D or E reservation needs every bridge between talker and listener to support the class. Where one does not, as at an SRP domain boundary for the class, MSRP turns the Talker Advertise into a Talker Failed (IEEE 802.1Q-2022 §35.2.2.8.7, failure codes in Table 46-15), listeners declare Listener Asking Failed (§35.1.2.2), and the stream is not forwarded. A talker whose class C, D or E stream draws only Listener Asking Failed declarations withdraws it and declares it again in Class A or B, as above.
+A talker sets the CLASS_B flag of its STREAM_INFO for Class B as usual.
 
-IEEE 1722.1-2021 STREAM_INFO can only signal Classes A and B, and a CLASS_B flag of 0 means Class A, so an ATDECC controller shows a class C, D or E stream as Class A. The stream's priority on the wire is still its class's, from the Domain declaration (informative).
+**Failure along the path.** A Class C reservation needs every bridge between talker and listener to support the class. Where one does not, as at an SRP domain boundary for the class, MSRP turns the Talker Advertise into a Talker Failed (IEEE 802.1Q-2022 §35.2.2.8.7, failure codes in Table 46-15), listeners declare Listener Asking Failed (§35.1.2.2), and the stream is not forwarded. A talker whose Class C stream draws only Listener Asking Failed declarations withdraws it and declares it again in Class A.
+
+IEEE 1722.1-2021 STREAM_INFO can only signal Classes A and B, and a CLASS_B flag of 0 means Class A, so an ATDECC controller shows a Class C stream as Class A. The stream's priority on the wire is still Class C's, from the Domain declaration (informative).
 
 ### 5.3 Reservation
 
@@ -208,8 +217,11 @@ Because `MaxIntervalFrames` is at least 1, a stream slower than its class's inte
 
 | SR class | Interval | Reserved | Used |
 |----------|----------|----------|------|
-| E | 1 ms | 0.91 Mb/s | 0.91 Mb/s |
-| B (fallback) | 250 µs | 3.65 Mb/s | 0.91 Mb/s |
+| C | 500 µs | 1.82 Mb/s | 0.91 Mb/s |
+| B | 250 µs | 3.65 Mb/s | 0.91 Mb/s |
+| A (fallback) | 125 µs | 7.30 Mb/s | 0.91 Mb/s |
+
+A network whose control cycle is 1 ms can set Class C's interval to match, and the stream then reserves only the 0.91 Mb/s it uses (informative).
 
 ### 5.4 Fast Start
 
@@ -261,13 +273,15 @@ An ATDECC controller connects these streams with ACMP like any other. It should 
 | Sends sensor and event streams as TSCF with `ACF_SENSOR` messages, `sz = 0`, one message per cluster | §2.1, §2.2 |
 | Encodes values in a tsLAN value format or its maker's documented format, binary32 big-endian, NaN for missing values | §3 |
 | Sets `avtp_timestamp` to the presentation time and `message_timestamp` to the acquisition time | §4 |
-| Uses SR class E or D where its port declares them, and B or A otherwise or when the reservation fails, with a TSpec within §5.3 | §5 |
+| Uses Class C for event streams and sensor streams that feed a control loop where its port declares it, and A otherwise or when the reservation fails; uses B or A for other sensor streams; with a TSpec within §5.3 | §5 |
+| Takes Class C's priority and VID from the Domain declaration, 6 and 2 until it receives one, and counts frames against the domain's Class C interval | §5.1 |
 | Packs clusters of one sample instant into one AVTPDU, one stream per rate | §6 |
 | Describes each stream with the TSCF stream format, SENSOR_CLUSTERs and a sensor mapping | §7 |
 | **Motion controller** | |
 | Sends setpoint streams as TSCF with `ACF_SENSOR`, or control streams with `ACF_GPC` and a registered `gpc_msg_id` | §2 |
 | Sets each AVTPDU's presentation time to when the values apply | §4.1 |
 | Uses SR class C where its port declares it, and A otherwise or when the reservation fails | §5 |
+| Takes Class C's priority and VID from the Domain declaration, 6 and 2 until it receives one, and counts frames against the domain's Class C interval | §5.1 |
 | Sends one setpoint or control stream per actuator group | §6 |
 | **Actuator listener** | |
 | Applies setpoint and control values at the presentation time | §4.1 |
@@ -275,8 +289,10 @@ An ATDECC controller connects these streams with ACMP like any other. It should 
 | Uses the configured indices of a variable-count cluster, counting absent ones as missing | §3.3 |
 | Describes its inputs with SENSOR_CLUSTERs whose formats name what it accepts | §7 |
 | **Bridge** | |
-| Supports SR classes C, D and E with the priorities of §5.1, and states so in its PICS, or acts as an SRP domain boundary for them | §5.1 |
-| Maps priorities 6, 5 and 4 to credit-shaped traffic classes above those of Classes A and B, and shapes or polices priority 7 | §5.1 |
-| Keeps Classes A to E within 75% of the port's transmit rate where Classes A or B share the port | §5.1 |
+| Supports SR class C, at priority 6 unless configured otherwise, and states so in its PICS, or acts as an SRP domain boundary for it | §5.1 |
+| Uses the same Class C priority and interval as the rest of its SRP domain, 6 and 500 µs by default | §5.1 |
+| Regenerates Class C's priority to 0 on ports that are SRP domain boundary ports for Class C | §5.1 |
+| Maps priority 6 to a credit-shaped traffic class and priority 7 to a shaped or policed one, both above those of Classes A and B | §5.1 |
+| Keeps Classes A, B and C within 75% of the port's transmit rate where Classes A or B share the port | §5.1 |
 | **ATDECC controller** | |
 | Connects these streams only between clusters of matching format | §7.4 |
