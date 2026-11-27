@@ -178,16 +178,24 @@ Class C keeps control deadlines of 500 µs and less apart from the 2 ms and 50 m
 
 **Queues.** IEEE 802.1Q-2022's default mapping for Classes A and B (Table 34-1) puts priorities 3 and 2 in the two highest traffic classes and priorities 6 and 7 below them, in strict-priority queues. A bridge supporting Class C therefore also configures:
 
-- its Traffic Class Table (§12.6.3), so priorities 7 and 6 take distinct traffic classes above those of priorities 3 and 2; and
+- its Traffic Class Table (§12.6.3), so priorities 7 and 6 take traffic classes above those of priorities 3 and 2, distinct ones where the port has more than four; and
 - its Transmission Selection Algorithm Table (§12.20.2), so priority 6's traffic class uses the credit-based shaper, as every SR class does (§34.5).
 
-With eight traffic classes, the mapping is:
+For ports with eight and with four traffic classes, the mapping is:
 
 | Priority | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |----------|---|---|---|---|---|---|---|---|
-| Traffic class | 1 | 0 | 4 | 5 | 2 | 3 | 6 | 7 |
+| Traffic class, of eight | 1 | 0 | 4 | 5 | 2 | 3 | 6 | 7 |
+| Traffic class, of four | 0 | 0 | 1 | 2 | 0 | 0 | 3 | 3 |
 
-Priorities 0, 1, 4 and 5 keep their Table 34-1 traffic classes, below Classes A and B. A profile that shapes or polices priorities 4 and 5, as the Robotics Profile does, may place them above Classes A and B instead (informative).
+With eight traffic classes, priorities 0, 1, 4 and 5 keep their Table 34-1 traffic classes, below Classes A and B. A profile that shapes or polices priorities 4 and 5, as the Robotics Profile does, may place them above Classes A and B instead (informative).
+
+**Four traffic classes.** A port with four traffic classes, such as one on a network controller with four transmit queues, has room for Classes C, A and B and one more. There, priority 7 shares Class C's traffic class, much as Table 34-1 groups priorities where traffic classes are few, and priorities 0, 1, 4 and 5 share the lowest:
+
+- the bridge polices priority 7 on ingress to the rate and burst its profile sets, and adds that rate to the traffic class's idle slope, so Class C keeps its reservation and Classes A and B their bounds; and
+- a port with more traffic classes keeps priorities 7 and 6 apart.
+
+The cost falls on priority 7: its frames wait behind the Class C frames already queued, and for the shaper's credit, instead of going ahead of them. Each 676-octet AVTPDU (§6) ahead adds about 57 µs at 100 Mb/s and 6 µs at 1 Gb/s, and a full-size frame about 123 µs at 100 Mb/s. A safety profile that needs a tighter bound for priority 7 uses ports with more than four traffic classes (informative).
 
 This profile leaves priority 7 to safety profiles, such as the Robotics Profile's safety heartbeat. Traffic at priority 7 is shaped or policed, so the shaped classes below keep their reservations, as IEEE 802.1Q-2022 §34.5 b) and Annex L.1 require.
 
@@ -292,7 +300,7 @@ An ATDECC controller connects these streams with ACMP like any other. It should 
 | Supports SR class C, at priority 6 unless configured otherwise, and states so in its PICS, or acts as an SRP domain boundary for it | §5.1 |
 | Uses the same Class C priority and interval as the rest of its SRP domain, 6 and 500 µs by default | §5.1 |
 | Regenerates Class C's priority to 0 on ports that are SRP domain boundary ports for Class C | §5.1 |
-| Maps priority 6 to a credit-shaped traffic class and priority 7 to a shaped or policed one, both above those of Classes A and B | §5.1 |
+| Maps priority 6 to a credit-shaped traffic class and priority 7 to a shaped or policed one, both above those of Classes A and B; with four traffic classes, polices priority 7 into Class C's, counting its rate in the idle slope | §5.1 |
 | Keeps Classes A, B and C within 75% of the port's transmit rate where Classes A or B share the port | §5.1 |
 | **ATDECC controller** | |
 | Connects these streams only between clusters of matching format | §7.4 |
