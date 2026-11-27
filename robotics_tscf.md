@@ -194,7 +194,7 @@ The queues, from the highest down, are:
 | Seventh | Priority 0 | |
 | Lowest | Priority 1 | |
 
-With eight queues, priorities 0, 1, 4 and 5 keep the queues Table 34-1 gives them, below Classes A and B. A profile that shapes or polices priorities 4 and 5, as the Robotics Profile does, may place them above Classes A and B instead (informative).
+With eight queues, priorities 0, 1, 4 and 5 keep the queues Table 34-1 gives them, below Classes A and B. A profile that shapes or polices priorities 4 and 5 may place them above Classes A and B instead (informative).
 
 **Four queues.** A port with four queues, such as one on a network controller with four transmit queues, has room for Classes C, A and B and one more. There, priority 7 shares Class C's queue, the highest, much as Table 34-1 groups priorities where queues are few; Class A has the next queue, then Class B, and priorities 0, 1, 4 and 5 share the lowest:
 

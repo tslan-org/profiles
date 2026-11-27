@@ -13,7 +13,7 @@ On-body robots carry two workloads on the same physical harness: high-rate close
 This profile specifies:
 
 - **Time synchronization:** a dedicated Working Clock domain with fixed port roles, fast-lock requirements, and holdover bounds, separated from Universal Time (§2).
-- **Traffic classes, VLANs, and shaping:** an eight-priority mapping with bounded shaping above IEEE 802.1BA SR Classes A and B, plus worst-case latency budgets for robotics and AVB media (§3).
+- **Traffic classes, VLANs, and shaping:** an eight-priority mapping with SR Class C and a shaped safety priority above IEEE 802.1BA SR Classes A and B, for ports with eight or four queues, plus worst-case latency budgets for robotics and AVB media (§3).
 - **Layer-2 transport framing:** packed cyclic command, joint state, and safety heartbeat payloads carried inside IEEE 1722 TSCF or NTSCF `ACF_GPC` frames (§4).
 - **End-to-end black-channel integrity:** Castagnoli CRC-32C protecting `data_id`, `gpc_msg_id`, `avtp_timestamp`, and payload, with sequence/epoch restart rules, deadline verification, and a deterministic actuator safety state machine (§5).
 - **Discovery and startup:** static fast-boot bindings for core body streams alongside IEEE 1722.1 ATDECC for enumeration, configuration, and hot-swappable tools (§6).
@@ -52,9 +52,9 @@ The number and placement of physical zones, as well as the assignment of logical
 A robot often carries microphones, speakers, and cameras alongside its control loops. This profile allows endpoints conforming to the **Basic Audio Profile**, **Extended Audio Profile**, **Basic Video Profile**, **Extended Video Profile**, **Voice Assistant Profile**, or **Milan** to operate on shared 1 Gb/s robot trunks (typically 1 to 3 hops) without modification, provided the bridge satisfies the coexistence rules of §2.1 and §3:
 
 - **Clock domain:** IEEE 802.1AS Domain 0 remains active with BTCA whenever any AVB media endpoint is present (§2.1).
-- **Priorities and VLAN:** Priorities 3 and 2 remain reserved for IEEE 802.1BA SR Class A and SR Class B in VLAN 2 (§3.1).
-- **Bounded interference:** All robotics classes sitting above SR Class A and B are shaped (CBS, ATS, or bounded TAS) and ingress-policed, keeping total reserved plus gated bandwidth within 75% of port rate and keeping SR Class A latency within Milan's 2 ms budget across the robot's trunk hop count (§3.2). AVB media streams are not expected to traverse narrow 100 Mb/s limb daisy-chains.
-- **Robotics TSCF Streams Profile:** this profile's `JointCommandArray` and `JointStateArray` streams are control streams (`ACF_GPC`, `gpc_msg_id = 8C:1F:64:36:C0:08`) of the Robotics TSCF Streams Profile (`robotics_tscf.md`); IMUs, force/torque sensors, and tactile maps may use its `ACF_SENSOR` sensor and event streams and its SR Classes C, D, and E.
+- **Priorities and VLAN:** Priorities 3 and 2 remain IEEE 802.1BA SR Class A and SR Class B in VLAN 2; robotics sensor streams that do not feed a control loop may use them, with their own reservations (§3.1).
+- **Bounded interference:** Priority 7 and SR Class C, the only robotics traffic above SR Classes A and B, are shaped (CBS, or bounded TAS) and ingress-policed, keeping total reserved plus gated bandwidth within 75% of port rate and keeping SR Class A latency within Milan's 2 ms budget across the robot's trunk hop count (§3.2). Priorities 5 and 4 sit below SR Classes A and B. AVB media streams are not expected to traverse narrow 100 Mb/s limb daisy-chains.
+- **Robotics TSCF Streams Profile:** this profile's `JointCommandArray` and `JointStateArray` streams are control streams (`ACF_GPC`, `gpc_msg_id = 8C:1F:64:36:C0:08`) of the Robotics TSCF Streams Profile (`robotics_tscf.md`); IMUs, force/torque sensors, and tactile maps may use its `ACF_SENSOR` sensor and event streams and its SR classes (§3.1).
 - **Wireless and Lite profiles:** Robotics endpoints bridging over Wi-Fi (such as an untethered operator console or auxiliary wireless sensor) follow the **AVB Wireless Profile** on the wireless hop. Auxiliary AVB media endpoints without a full TSN bridge may use the **AVB Lite Profile**, while closed-loop actuation remains on wired TSN links meeting Tier 1 or Tier 2.
 
 ### 1.5 Draft Notes (informative)
@@ -106,25 +106,44 @@ In IEEE 802.1AS-2020 §10.3.1, `externalPortConfigurationEnabled` is a per-PTP-I
 
 ### 3.1 Priority and VLAN Allocation
 
-IEEE 802.1Q-2022 Table 34-1 and Table 9-2 default SR Class A to priority 3, SR Class B to priority 2, and the SR VLAN to VID 2. This profile preserves those assignments so AVB audio and video profiles work without modification:
+IEEE 802.1Q-2022 Table 34-1 and Table 9-2 default SR Class A to priority 3, SR Class B to priority 2, and the SR VLAN to VID 2. This profile preserves those assignments so AVB audio and video profiles work without modification, and adds SR Class C of the Robotics TSCF Streams Profile (its §5.1) for robotics streams:
 
-- Where bridges run MSRP SR Classes C, D, and E (per the Robotics TSCF Streams Profile §5.1), robotics streams share the SR VLAN (`SRclassVID`, VID 2 by default) on priorities 6, 5, and 4 and stay off priorities 2 and 3.
-- Where core robotics classes are statically configured without MSRP, bridges may isolate robotics control traffic on a separate **Robotics Control VLAN** (VID 3 by default, configurable per platform).
+- **SR Class C (priority 6 by default):** control streams (`JointCommandArray`, `JointStateArray`), event streams (contact, slip, impact, and joint fault alerts), and sensor streams that feed a control loop.
+- **SR Class B (priority 2), or SR Class A (priority 3) where a stream needs its lower latency:** other sensor streams, alongside AVB media.
+- **Priority 7:** `SafetyHeartbeat` and E-Stop / STO frames, shaped and policed but not an SR class.
+- **Priorities 5 and 4:** no robotics streams. They stay unshaped, below SR Classes A and B. SR Classes D and E, which would shape event and sensor streams on them, are deferred, as in the Robotics TSCF Streams Profile.
+
+Where bridges run MSRP, robotics streams share the SR VLAN (`SRclassVID`, VID 2 by default). Where core robotics streams are statically configured without MSRP, bridges may isolate robotics control traffic on a separate **Robotics Control VLAN** (VID 3 by default, configurable per platform), on the same priorities.
 
 Per IEEE 802.1Q-2022 §34.5 b) and Annex L.1 NOTE 2, placing an unshaped strict-priority class above a CBS class makes the lower CBS class's `maxInterferenceSize` infinite and breaks its bandwidth guarantee. Therefore, **no unshaped strict-priority queue is permitted above priorities 2 and 3** on any port carrying AVB SR Class A or Class B streams; priority 7 (Safety) is shaped with CBS and ingress-policed via PSFP on every port including the safety supervisor's own port.
 
-Bridges shall configure their Traffic Class Table (IEEE 802.1Q-2022 §12.6.3) and Transmission Selection Algorithm Table (§12.20.2) so priorities 4 through 7 occupy distinct shaped traffic classes above SR Classes A and B (with eight traffic classes: priority 1 to TC 0, priority 0 to TC 1, and priorities 2 through 7 to TC 2 through 7):
+Bridges shall configure their Traffic Class Table (IEEE 802.1Q-2022 §12.6.3) and Transmission Selection Algorithm Table (§12.20.2) so priority 7 and SR Class C have shaped queues above those of SR Classes A and B, and priorities 5 and 4 keep the unshaped queues Table 34-1 gives them, below SR Classes A and B:
 
 | Priority | Traffic Class | Queue / Shaper Mechanism | Tier 2 Preemption | Workload |
 |----------|---------------|--------------------------|-------------------|----------|
 | **7** | Safety | CBS (static small idle slope) + PSFP | Express | `SafetyHeartbeat`, E-Stop / STO control frames (bounded burst) |
-| **6** | Isochronous control | TAS (Tier 2) or CBS (Tier 1) + PSFP | Express | Cyclic actuator command and telemetry streams (1 to 4 kHz) |
-| **5** | Aperiodic events | ATS (802.1Qcr) or CBS + PSFP | Express | Contact/slip interrupts, joint fault alerts, tactile events |
-| **4** | High-rate sensors | CBS (802.1Qav) + PSFP | Preemptable | Non-AVB IMUs (1 kHz), force/torque sensors, raw sensor arrays |
-| **3** | SR Class A | CBS (802.1Qav) | Preemptable | IEEE 802.1BA / Milan SR Class A media streams |
-| **2** | SR Class B | CBS (802.1Qav) | Preemptable | Basic Audio (AAF), Basic Video (CVF/RVF), Voice Assistant streams |
+| **6** | SR Class C | CBS (802.1Qav) + PSFP, with TAS in Tier 2 | Express | Cyclic actuator command and telemetry streams (1 to 4 kHz), contact, slip, and joint fault events, tactile events, and IMU and force/torque streams that feed a control loop |
+| **3** | SR Class A | CBS (802.1Qav) | Preemptable | IEEE 802.1BA / Milan SR Class A media streams, and sensor streams that need Class A's latency |
+| **2** | SR Class B | CBS (802.1Qav) | Preemptable | Basic Audio (AAF), Basic Video (CVF/RVF), Voice Assistant streams, and other sensor streams |
+| **5** | Unshaped | Strict, below SR Classes A and B | Preemptable | No robotics streams (SR Class D deferred) |
+| **4** | Unshaped | Strict, below SR Classes A and B | Preemptable | No robotics streams (SR Class E deferred) |
 | **0** | Best effort | Best effort (strict below shaped classes) | Preemptable | IEEE 1722.1 ATDECC (ADP, AECP, ACMP, `MEMORY_OBJECT` firmware), ROS 2 / Zenoh control, diagnostics |
 | **1** | Background | Background (strict below shaped classes) | Preemptable | Bulk telemetry logging, non-ATDECC bulk file transfers |
+
+The queues, from the highest down, are those of the Robotics TSCF Streams Profile (its §5.1):
+
+| Queue | Port with eight queues | Port with four queues |
+|-------|------------------------|-----------------------|
+| Highest | Priority 7 | Priority 7 and SR Class C (priority 6) |
+| Second | SR Class C (priority 6) | SR Class A (priority 3) |
+| Third | SR Class A (priority 3) | SR Class B (priority 2) |
+| Fourth | SR Class B (priority 2) | Priorities 0, 1, 4, and 5 |
+| Fifth | Priority 5 | |
+| Sixth | Priority 4 | |
+| Seventh | Priority 0 | |
+| Lowest | Priority 1 | |
+
+**Four queues.** A port with four queues, such as one on a network controller with four transmit queues, puts priority 7 in SR Class C's queue, policed on ingress (§3.3) and counted in Class C's idle slope; a port with more than four queues keeps priorities 7 and 6 apart. On a four-queue port, priority 7 frames wait behind the Class C frames already queued, about 20 µs for each 7-slot limb command at 100 Mb/s (§3.2), and, in Tier 2 where Class C's gate opens only for its window, up to one `T_cycle`. Both stay well within `heartbeat_timeout_ns` (50 ms by default, §5.3) (informative).
 
 **gPTP frames are untagged.** Per IEEE 802.1AS-2020 §11.3.3, frames carrying IEEE 802.1AS messages shall not carry a VLAN tag or a priority tag. They are link-local (destination MAC `01:80:C2:00:00:0E`, EtherType `0x88F7`) and therefore do not appear in the VLAN priority table above; bridges map untagged gPTP frames internally to their highest transmit priority (express queue in Tier 2) and exempt them from the VLAN CBS idle-slope rule (they do not consume priority 7's idle slope). A Sync and Follow_Up pair takes about 198 octets on the wire per Sync interval per domain (~0.20 Mb/s per domain at `-7`), so even with Domain 0, Domain 1, and Domain 2 (Hot Standby) active plus Pdelay exchanges, total gPTP wire load stays under 0.7 Mb/s and its interference into CBS classes is negligible (informative).
 
@@ -132,18 +151,18 @@ Bridges shall configure their Traffic Class Table (IEEE 802.1Q-2022 §12.6.3) an
 
 #### Shaper Bandwidth Provisioning
 
-- CBS idle slopes for core robotics classes (priorities 4, 5, 6, and 7) shall be statically pre-configured on bridges at boot (matching IEEE 802.1DG and IEC/IEEE 60802) so closed-loop control does not wait on dynamic reservations.
-- SR Class A and Class B (priorities 3 and 2) obtain idle slopes through MSRP reservations per IEEE 802.1BA, or through static bridge configuration where MSRP is disabled.
-- On any port carrying both robotics and AVB SR traffic, the sum of all robotics static idle slopes (priorities 4 to 7), any Tier 2 TAS exclusive-window duty cycle (`(W_ctrl + W_guard) / T_cycle`), and all SR Class A and B reservations shall not exceed **75% of port transmit rate**.
+- CBS idle slopes for priority 7 and for the SR Class C reservations of core body streams shall be statically pre-configured on bridges at boot (matching IEEE 802.1DG and IEC/IEEE 60802) so closed-loop control does not wait on dynamic reservations.
+- SR Class A and Class B (priorities 3 and 2), including the robotics sensor streams they carry, obtain idle slopes through MSRP reservations per IEEE 802.1BA, or through static bridge configuration where MSRP is disabled.
+- On any port carrying both robotics and AVB SR traffic, the sum of the idle slopes of priority 7 and SR Class C, any Tier 2 TAS exclusive-window duty cycle (`(W_ctrl + W_guard) / T_cycle`), and all SR Class A and B reservations shall not exceed **75% of port transmit rate**.
 
 #### AVB SR Class Coexistence Latency (IEEE 802.1Q-2022 Annex L.3)
 
-Because priorities 4 through 7 sit above SR Class A (priority 3) and SR Class B (priority 2), every higher class must have a bounded maximum burst enforced by CBS / ATS and PSFP (or bounded TAS window `W_ctrl` in Tier 2):
+Because priority 7 and SR Class C (priority 6) sit above SR Class A (priority 3) and SR Class B (priority 2), each must have a bounded maximum burst enforced by CBS and PSFP (or a bounded TAS window `W_ctrl` in Tier 2). Priorities 5 and 4 sit below SR Classes A and B, so like priorities 0 and 1 they add at most one lower-priority frame, counted below:
 
-- **Tier 1 (all CBS on priorities 4 to 7) on a 1 Gb/s trunk:** Let `S_high` be the sum of idle slopes for priorities 4 to 7 (recommended cap `S_high <= 250 Mb/s`, 25% of 1 Gb/s) and `B_high` be the sum of maximum policed bursts across priorities 4 to 7 (for a 32-DOF robot: up to 2 priority-7 frames 256 B + 4 limb commands 1,016 B + 4 events 600 B + 4 sensors 1,120 B = 2,992 octets). Including one max lower-priority frame (`1,542` octets including preamble and IFG), per IEEE 802.1Q-2022 Annex L.3 the worst-case per-hop interference into SR Class A is:
+- **Tier 1 (CBS on priority 7 and SR Class C) on a 1 Gb/s trunk:** Let `S_high` be the sum of the idle slopes of priority 7 and SR Class C (recommended cap `S_high <= 250 Mb/s`, 25% of 1 Gb/s) and `B_high` be the sum of their maximum policed bursts (for a 32-DOF robot: up to 2 priority-7 frames 256 B, plus in Class C 4 limb commands 1,016 B + 4 events 600 B + 4 control-loop sensors 1,120 B = 2,992 octets). Including one max lower-priority frame (`1,542` octets including preamble and IFG), per IEEE 802.1Q-2022 Annex L.3 the worst-case per-hop interference into SR Class A is:
   - `maxInterferenceSize` (lower + higher bursts) = `1,542 + 2,992 = 4,534` octets.
   - At effective remaining rate `1,000 - 250 = 750 Mb/s`, worst-case per-hop queuing delay for SR Class A is `4,534 * 8 / 750,000,000 = 48.4 µs` (plus bridge internal delay ~5 µs). Across a 3-hop robot trunk, SR Class A worst-case latency is **under 0.2 ms**, well within Milan's 2 ms Class A bound and the 50 ms Class B bound.
-- **Tier 2 (TAS on priority 6) on a 1 Gb/s trunk:** A protected priority-6 TAS window `W_ctrl` plus guard band `W_guard` (20 µs without preemption, about 1 µs with 802.1Qbu preemption) closes lower queues once per cycle `T_cycle`. On a 2 kHz (500 µs) cycle with `W_ctrl = 100 µs` and `W_guard = 20 µs` (24% gate closure), each hop adds at most `120 µs` plus higher CBS bursts (about 15 µs) to SR Class A latency, keeping 3-hop trunk latency **under 0.5 ms** (still well within Milan's 2 ms bound) provided `W_ctrl + W_guard` plus other shaped idle slopes stays within the 75% port budget.
+- **Tier 2 (TAS on SR Class C) on a 1 Gb/s trunk:** A protected Class C TAS window `W_ctrl` plus guard band `W_guard` (20 µs without preemption, about 1 µs with 802.1Qbu preemption) closes lower queues once per cycle `T_cycle`. On a 2 kHz (500 µs) cycle with `W_ctrl = 100 µs` and `W_guard = 20 µs` (24% gate closure), each hop adds at most `120 µs` plus the remaining priority 7 and Class C bursts (about 15 µs) to SR Class A latency, keeping 3-hop trunk latency **under 0.5 ms** (still well within Milan's 2 ms bound) provided `W_ctrl + W_guard` plus other shaped idle slopes stays within the 75% port budget.
 
 #### Tier 1 Robotics Closed-Loop Latency Bound
 
@@ -174,9 +193,9 @@ Therefore, Tier 1 networks running 2 kHz (500 µs) loops shall satisfy the round
 
 Bridges shall enforce IEEE 802.1Qci Per-Stream Filtering and Policing (PSFP), or equivalent hardware ingress rate, priority, and MTU filters, on every port, including the controller and safety supervisor ports:
 
-- High-bandwidth perception streams (priorities 2, 3, and 4 from head cameras or LiDAR) shall be filtered by VLAN and multicast forwarding rules so they are never forwarded onto limb actuator ports.
+- High-bandwidth perception streams (such as head camera and LiDAR streams in SR Class A or B) shall be filtered by VLAN and multicast forwarding rules so they are never forwarded onto limb actuator ports.
 - Priority 7 (`SafetyHeartbeat` and immediate E-Stop / STO frames) shall be policed on ingress to its provisioned maximum frame size (<= 128 octets), committed rate matching the configured heartbeat rate (100 Hz up to the control loop rate), and a **burst allowance of at least 2 frames per heartbeat interval** (256 octets) so an immediate E-Stop frame emitted between periodic heartbeats is never dropped at the supervisor's port while still strictly bounding interference into lower CBS classes.
-- No limb or peripheral port shall be permitted to inject priority 5, 6, or 7 traffic exceeding its provisioned frame size and rate.
+- No limb or peripheral port shall be permitted to inject priority 6 or 7 traffic exceeding its provisioned frame size and rate.
 
 ---
 
@@ -419,8 +438,8 @@ Every zonal controller, smart actuator, and modular end-effector runs an IEEE 17
 | Relays IEEE 802.1AS Domain 1 (Working Clock) with `externalPortConfigurationEnabled = TRUE`, fixed port roles, and support for `initialLogPdelayReqInterval = -5` and `initialLogSyncInterval` of `-7` or `-6` | §2.1, §2.2 |
 | Runs IEEE 802.1AS Domain 0 with BTCA active whenever AVB or Milan media endpoints are present | §2.1 |
 | Transmits and receives gPTP untagged at highest internal priority (express in Tier 2) | §3.1 |
-| Supports 8 priorities, preserves priorities 3 and 2 for SR Classes A and B, places no unshaped strict-priority queue above priorities 2 and 3, and isolates robotics control on VID 3 (or off priorities 2 and 3 if sharing VID 2) | §3.1 |
-| Configures static CBS idle slopes for core robotics classes (priorities 4 to 7), keeps total shaped plus gated bandwidth within 75% of port rate, and enforces Tier 1 store-and-forward cycle bounds or Tier 2 TAS plus Frame Preemption | §1.2, §3.2 |
+| Supports 8 priorities, preserves priorities 3 and 2 for SR Classes A and B, supports SR Class C at priority 6, places no unshaped strict-priority queue above priorities 2 and 3, maps priorities to queues as §3.1 sets for eight and four queues, and carries robotics control in SR Class C, on VID 2 or the Robotics Control VLAN (VID 3) | §3.1 |
+| Configures static CBS idle slopes for priority 7 and the SR Class C reservations of core body streams, keeps total shaped plus gated bandwidth within 75% of port rate, and enforces Tier 1 store-and-forward cycle bounds or Tier 2 TAS plus Frame Preemption | §1.2, §3.2 |
 | Enforces PSFP (802.1Qci) or equivalent ingress policing on every port, including controller and safety supervisor ports, isolating perception streams from limb ports | §3.3 |
 | **Controller and Safety Supervisor** | |
 | Paces `JointCommandArray` TSCF frames on Domain 1 Working Clock with `t_exec` in `avtp_timestamp` and `gpc_msg_id = 8C:1F:64:36:C0:08` | §2.1, §4.1, §4.2 |
@@ -450,15 +469,15 @@ Achieving fast reflexes and stable stiff-contact interaction across running, pus
 | Motor current / torque (FOC) | 20 to 50 kHz (20 to 50 µs) | Local only | < 100 µs | Local | Matches PWM carrier; makes each joint behave as an ideal torque source on sudden impact |
 | Local joint impedance (`kp`, `kd`) | 4 to 20 kHz | Setpoints at 2 kHz (4 kHz stretch) | < 250 µs | 6 (setpoints) | Evaluates `torque_ff + kp*e + kd*de` locally off the joint encoder with near-zero phase lag |
 | Whole-body cyclic actuation | Local FOC | 2 kHz (500 µs) target; 4 kHz (250 µs) stretch | < 1 ms sense-to-actuate | 6 | 10 to 20x above limb/drivetrain mechanical resonance (20 to 150 Hz); preserves 150 to 250 µs compute budget |
-| Foot and wrist 6-axis F/T | 2 to 4 kHz (anti-aliased) | 2 kHz (locked 1:1 to control cycle) | < 500 µs | 6 or 4 | Captures steep 2 to 5 ms rigid heel-strike and insertion contact transients cleanly |
-| Fingertip slip / micro-vibration | 2 to 4 kHz (piezo, barometric, shear) | 1 kHz continuous plus priority-5 slip interrupt | < 1 to 2 ms (local hand reflex < 500 µs) | 5 (events), 4 (stream) | Incipient stick-slip and hard-contact vibrations lie in 50 to 800 Hz (human Pacinian band) |
-| Dense whole-body tactile skin | 200 to 500 Hz taxel scan | 100 to 250 Hz spatial map plus impact interrupt | < 5 to 10 ms | 5 (impact), 4 (map) | Static pressure, object weight, and body collision localization sit below ~100 Hz |
+| Foot and wrist 6-axis F/T | 2 to 4 kHz (anti-aliased) | 2 kHz (locked 1:1 to control cycle) | < 500 µs | 6 (SR C) | Captures steep 2 to 5 ms rigid heel-strike and insertion contact transients cleanly |
+| Fingertip slip / micro-vibration | 2 to 4 kHz (piezo, barometric, shear) | 1 kHz continuous plus slip event stream | < 1 to 2 ms (local hand reflex < 500 µs) | 6 (SR C) | Incipient stick-slip and hard-contact vibrations lie in 50 to 800 Hz (human Pacinian band) |
+| Dense whole-body tactile skin | 200 to 500 Hz taxel scan | 100 to 250 Hz spatial map plus impact event stream | < 5 to 10 ms | 6 (SR C, impact), 3 (SR A, map) | Static pressure, object weight, and body collision localization sit below ~100 Hz |
 | Optical tactile fingertips | 60 to 120 Hz (global shutter) | 60 to 120 Hz | < 15 ms | 3 or 2 (SR A/B) | High spatial geometry/shear reconstruction; pairs with 2 kHz piezo/barometer for fast slip |
-| Chassis / head IMU | 1 to 4 kHz | 1 kHz | < 1 ms | 4 | Synchronized on Working Clock for state estimation and visual-inertial odometry |
+| Chassis / head IMU | 1 to 4 kHz | 1 kHz | < 1 ms | 6 (SR C) | Synchronized on Working Clock for state estimation and visual-inertial odometry |
 | Whole-body MPC / RL policy | Internal to compute | 50 to 200 Hz | 5 to 20 ms | Internal | Feeds smooth trajectory references and impedance gains into the 2 kHz whole-body controller |
 
 - **Why 2 kHz networked plus local impedance is the sweet spot:** 1 kHz (1 ms) already exceeds human monosynaptic spinal reflex speed (~25 to 40 ms), but rigid contact and stiff force control benefit substantially from 2 kHz (500 µs). Because `JointCommand` (§4.3.2) carries `kp` and `kd` directly to each joint MCU, high-rate PD damping runs locally at 4 to 20 kHz with zero wire delay. Pushing the networked loop to 4 kHz (250 µs) is practical in Tier 2 (or on 1 Gb/s limb links with limb-sized frames) for ultra-stiff assembly or haptic teleoperation, whereas higher network rates show diminishing returns compared to faster local reflexes.
-- **Why tactile sensing splits by frequency:** Separating 2 to 4 kHz local slip/impact detection (emitting priority-5 aperiodic interrupts on threshold crossings) from 100 to 250 Hz whole-body spatial maps prevents thousands of idle taxels from saturating limb links while keeping grasp-slip and collision reaction times under 1 to 2 ms.
+- **Why tactile sensing splits by frequency:** Separating 2 to 4 kHz local slip/impact detection (emitting SR Class C event streams on threshold crossings) from 100 to 250 Hz whole-body spatial maps prevents thousands of idle taxels from saturating limb links while keeping grasp-slip and collision reaction times under 1 to 2 ms.
 
 ### A.2 Autonomous Mobile Robots and Automotive ADAS / Drive-by-Wire
 
@@ -468,13 +487,13 @@ Wheeled autonomous vehicles and heavy mobile robots exhibit lower mechanical res
 |-----------|-------------------------|-----------------------|----------------------------------|-----------------|-----------|
 | Traction / EPS / EMB motor FOC | 10 to 20 kHz (50 to 100 µs) | Local only | < 200 µs | Local | Drives steering assist, electro-mechanical brakes (EMB), and traction inverters smoothly |
 | Steer-by-wire / brake-by-wire / torque vectoring | Local 1 to 2 kHz inner servo | 500 Hz to 1 kHz (1 to 2 ms) target; 200 Hz minimum | < 2 to 5 ms | 6 | 10 to 30x above vehicle yaw/steering/brake mechanical bandwidth (5 to 30 Hz); supports crisp ABS/ESP/stability reflexes |
-| Emergency brake / AEB / STO trigger | Local safety monitor | Event-driven plus 100 Hz `SafetyHeartbeat` | < 1 to 2 ms wire delivery | 7 (STO/HB), 5 (AEB event) | Immediate collision-avoidance actuation and fail-operational fallback across redundant paths (802.1CB FRER optional) |
-| Wheel-speed, steering-angle, brake-pressure sensors | 1 to 2 kHz | 500 Hz to 1 kHz (locked to control cycle) | < 1 to 2 ms | 6 or 4 | Feeds ABS/ESC slip estimation, odometry, and dead reckoning on one shared Working Clock |
-| 6-axis chassis IMU / GNSS-INS | 1 kHz IMU; 10 to 50 Hz GNSS | 200 Hz to 1 kHz IMU; 10 to 50 Hz GNSS | < 2 ms (IMU) | 4 | High-rate attitude/acceleration for ego-motion compensation of LiDAR and radar sweeps |
-| 4D imaging radar | Internal chirp processing | 20 to 50 Hz (20 to 50 ms) | < 20 ms | 4 or 3 | Point-cloud / range-Doppler frames aligned to Working Clock for all-weather obstacle tracking |
-| 3D LiDAR | 10 to 20 Hz spin / solid-state | 10 to 20 Hz (packetized continuously) | < 20 ms | 3 or 4 | High-throughput point streams confined to 1 Gb/s+ perception trunks by VLAN/PSFP |
+| Emergency brake / AEB / STO trigger | Local safety monitor | Event-driven plus 100 Hz `SafetyHeartbeat` | < 1 to 2 ms wire delivery | 7 (STO/HB), 6 (SR C, AEB event) | Immediate collision-avoidance actuation and fail-operational fallback across redundant paths (802.1CB FRER optional) |
+| Wheel-speed, steering-angle, brake-pressure sensors | 1 to 2 kHz | 500 Hz to 1 kHz (locked to control cycle) | < 1 to 2 ms | 6 (SR C) | Feeds ABS/ESC slip estimation, odometry, and dead reckoning on one shared Working Clock |
+| 6-axis chassis IMU / GNSS-INS | 1 kHz IMU; 10 to 50 Hz GNSS | 200 Hz to 1 kHz IMU; 10 to 50 Hz GNSS | < 2 ms (IMU) | 6 (SR C) or 3 (SR A) | High-rate attitude/acceleration for ego-motion compensation of LiDAR and radar sweeps |
+| 4D imaging radar | Internal chirp processing | 20 to 50 Hz (20 to 50 ms) | < 20 ms | 3 or 2 (SR A/B) | Point-cloud / range-Doppler frames aligned to Working Clock for all-weather obstacle tracking |
+| 3D LiDAR | 10 to 20 Hz spin / solid-state | 10 to 20 Hz (packetized continuously) | < 20 ms | 3 or 2 (SR A/B) | High-throughput point streams confined to 1 Gb/s+ perception trunks by VLAN/PSFP |
 | Surround and front ADAS cameras | 30 to 60 Hz (global shutter) | 30 to 60 Hz (CVF, RVF, or 1722-2025 GISF) | < 15 to 33 ms | 3 or 2 (SR A/B) | Coherent multi-camera shutter sync via Working Clock; CBS shaping prevents bursts from delaying control |
-| Ultrasonic / short-range proximity | 20 to 50 Hz | 20 to 50 Hz plus priority-5 close-contact alert | < 5 to 10 ms (alert) | 5 (alert), 4 (stream) | Low-speed parking, docking, and bumper-proximity reflex |
+| Ultrasonic / short-range proximity | 20 to 50 Hz | 20 to 50 Hz plus close-contact alert event stream | < 5 to 10 ms (alert) | 6 (SR C, alert), 2 (SR B, stream) | Low-speed parking, docking, and bumper-proximity reflex |
 | ADAS sensor fusion and path planning | Internal to compute | 20 to 50 Hz (20 to 50 ms) | 20 to 50 ms | Internal | Computes drivable trajectories and longitudinal/lateral targets feeding the 500 Hz to 1 kHz drive-by-wire controller |
 
 - **Coexistence and redundancy:** Because ADAS drive-by-wire loops run at 500 Hz to 1 kHz (1 to 2 ms cycles) while multi-camera and LiDAR perception consume hundreds of megabits per second on gigabit trunks, Tier 1 (1 Gb/s trunks with CBS + PSFP) easily meets automotive latency bounds, while Tier 2 adds TAS (802.1Qbv), Frame Preemption (802.1Qbu / 802.3br), and optional FRER (802.1CB) plus 802.1AS-2025 Hot Standby on safety-critical steer-by-wire and brake-by-wire paths.
